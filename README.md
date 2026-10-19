@@ -1,16 +1,19 @@
-# React + Vite
+# ARNGREN React 商城首頁
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## 啟動
+```bash
+npm install
+npm run dev
+```
+依照終端機顯示的網址開啟網站。正式建置可執行 `npm run build`。
 
-Currently, two official plugins are available:
+## 功能
+- 首頁、探索商品、商品比較、購物車與商品詳情頁
+- 分類篩選、關鍵字搜尋、排序
+- 比較清單最多 3 件商品
+- 購物車數量增減、移除商品、總金額計算
+- 共用 React 狀態、操作成功提示、響應式版面
+- 商品圖片使用 Unsplash 遠端圖片，需可連線至網路
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 說明
+這是可操作的前端展示版；結帳按鈕只展示流程提示，未串接後端、會員、庫存 API 或真實金流。
