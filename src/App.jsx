@@ -30,8 +30,9 @@ const readSaved = () => { try { return JSON.parse(localStorage.getItem('arngren-
 const readRoute = () => location.hash.replace(/^#/, '') || 'home';
 const navButton = (label, route, navigate, cls = 'btn btn-primary', extra = {}) => <button className={cls} data-route={route} onClick={() => navigate(route)} {...extra}>{label}</button>;
 
-function ProductCard({p, compare, toggleCompare, add, navigate, user, toggleFavorite}) {
+function ProductCard({p, compare, toggleCompare, add, navigate, user, toggleFavorite, compareList = [], activeCompare = [], onAddToCompareList}) {
   const isFavorite = (user?.favorites || []).includes(p.id);
+  const isCompared = user? compareList.includes(p.id) : compare.includes(p.id);
   return <article className="product-card">
     <div className="product-visual" role="link" tabIndex={0} aria-label={'查看' + p.name + '詳情'} onClick={() => navigate('detail/' + p.id)} onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -67,17 +68,23 @@ function ProductCard({p, compare, toggleCompare, add, navigate, user, toggleFavo
         <button
           className={
             'btn card-action-btn compare-button ' +
-            (compare.includes(p.id) ? 'is-selected' : '')
+            (isCompared ? 'is-selected' : '')
           }
           data-compare-action={p.id}
-          data-tooltip={compare.includes(p.id) ? '移出比較' : '加入比較'}
-          aria-label={compare.includes(p.id) ? '移出比較' : '加入比較'}
-          aria-pressed={compare.includes(p.id)}
-          onClick={() => toggleCompare(p.id)}
+          data-tooltip={isCompared ? '移出比較' : '加入比較'}
+          aria-label={isCompared ? '移出比較' : '加入比較'}
+          aria-pressed={isCompared}
+          onClick={() => {
+            if (user) {
+              onAddToCompareList(p.id);
+            } else {
+              toggleCompare(p.id);
+            }
+          }}
         >
           <ArrowsLeftRight size={18} />
           <span className="action-label">
-            {compare.includes(p.id) ? '移出比較' : '加入比較'}
+            {isCompared ? '移出比較' : '加入比較'}
           </span>
         </button>
 
@@ -186,16 +193,181 @@ function Detail({p,navigate,compare,toggleCompare,add}) {
   </div>;
 }
 
-function Compare({compare,navigate,add,toggleCompare}) {
-  const ps=compare.map(byId).filter(Boolean);
-  if(ps.length<2) return <div className="container"><Crumbs items={['商品比較']} navigate={navigate} /><div className="empty" style={{margin:'25px 0 70px'}}><h1 className="page-title">並排比較，更容易選擇</h1><p>請先從商品卡片選擇兩項商品。現在已選 {ps.length} 項。</p>{navButton('挑選商品','catalog',navigate)}</div></div>;
-  const rows=[['價格',p=>money(p.price)],['供應狀態',p=>p.status],...Object.keys(ps[0].spec).map(k=>[k,p=>p.spec[k]||'尚未公布'])];
-  return <div className="container compare-page"><Crumbs items={['商品比較']} navigate={navigate} /><div className="compare-toolbar"><div><h1 className="page-title">商品比較</h1><p className="lead">用相同欄位查看差異；未知資訊會保留為「尚未公布」。</p></div>{navButton('更換比較商品','catalog',navigate,'btn btn-quiet btn-sm')}</div>
-    <div className="compare-grid"><div className="compare-cell label visual">比較項目</div>{ps.map(p=><div className="compare-cell visual compare-product" key={p.id}><img src={photo(p)} alt={p.name+'商品概念圖片'} /><h3>{p.name}</h3><div className="price">{money(p.price)}</div><button className="text-link" onClick={()=>navigate('detail/'+p.id)}>查看詳情</button><button className="compare-remove-btn" onClick={() => toggleCompare(p.id)}> 移除比較 </button></div>)}
-      {rows.flatMap(([k,get])=>[<div className="compare-cell label" key={k+'label'}>{k}</div>,...ps.map(p=><div className="compare-cell" key={k+p.id}>{get(p)}</div>)])}</div>
-    <div className={'info-note '+(ps.some(p=>p.price==null)?'warning':'')}>{ps.some(p=>p.price==null)?'其中一款商品的資訊尚未完整公布。請先詢問，不要依未確認資料做購買決定。':'比較資料是設計示意，正式購買前請確認實際資訊。'}</div>
-    <div className="detail-actions">{ps.map(p=>p.price==null?navButton('詢問 '+p.name,'inquiry/'+p.id,navigate,'btn btn-primary',{key:p.id,'data-inquire':p.id}):<button key={p.id} className="btn btn-outline" onClick={()=>add(p.id)}>加入購物車：{p.name}</button>)}</div>
-  </div>;
+function Compare({compare, navigate, add, toggleCompare, user,
+  compareList = [], activeCompare = [], onAddActiveCompare, onCancelActiveCompare, onRemoveCompareList}) {
+  const isLoggedIn = !!user;
+
+  // 未登入使用舊的 compare；登入後使用 activeCompare
+  const selectedIds = isLoggedIn ? activeCompare : compare;
+  const ps = selectedIds.map(byId).filter(Boolean);
+
+  // 登入後的完整比較清單
+  const listProducts = compareList.map(byId).filter(Boolean);
+
+  // 只有兩個商品時才產生比較規格
+  const rows = ps.length >= 2
+    ? [
+        ['價格', p => money(p.price)],
+        ['供應狀態', p => p.status],
+        ...Object.keys(ps[0].spec).map(
+          k => [k, p => p.spec[k] || '尚未公布']
+        )
+      ]
+    : [];
+
+  return (
+    <div className="container compare-page">
+      <Crumbs items={['商品比較']} navigate={navigate} />
+
+      <div className="compare-toolbar">
+        <div>
+          <h1 className="page-title">商品比較</h1>
+          <p className="lead">
+            {isLoggedIn
+              ? '管理已保存的商品，每次選擇兩項進行比較。'
+              : '用相同欄位查看差異；未知資訊會保留為「尚未公布」。'}
+          </p>
+        </div>
+
+        {navButton(
+          '更換比較商品',
+          'catalog',
+          navigate,
+          'btn btn-quiet btn-sm'
+        )}
+      </div>
+
+      <div className={isLoggedIn ? 'member-compare-layout' : ''}>
+
+        {/* 登入會員才顯示左側比較清單 */}
+        {isLoggedIn && (
+          <aside className="compare-list-panel">
+            <h2>我的比較清單</h2>
+            <p>已保存 {listProducts.length} 項商品</p>
+
+            {listProducts.length === 0 ? (
+              <p>目前沒有保存的商品。</p>
+            ) : (
+              listProducts.map(p => {
+                const isActive = activeCompare.includes(p.id);
+                return (
+                  <div className="compare-list-item" key={p.id}>
+                    <img src={photo(p)} alt={p.name} />
+                    <div className="compare-list-info">
+                      <strong>{p.name}</strong>
+                      <span>{money(p.price)}</span>
+
+                      {isActive ? (
+                        <button
+                          className="text-link"
+                          onClick={() => onCancelActiveCompare(p.id)}
+                        > 取消比較 </button>
+                      ) : (
+                        <button
+                          className="text-link"
+                          disabled={activeCompare.length >= 2}
+                          onClick={() => onAddActiveCompare(p.id)}
+                        > {activeCompare.length >= 2
+                            ? '請先取消一項'
+                            : '加入比較'}
+                        </button>
+                      )}
+
+                      <button
+                        className="compare-remove-btn"
+                        onClick={() => onRemoveCompareList(p.id)}
+                      > 移除清單 </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <p className="compare-list-count"> 目前比較：{ps.length} / 2 </p>
+          </aside>
+        )}
+
+        {/* 右側比較區 */}
+        <section className="compare-main">
+          {ps.length < 2 ? (
+            <div className="empty" style={{ margin: '25px 0 70px' }}>
+              <h2 className="page-title">並排比較，更容易選擇</h2>
+              <p>
+                {isLoggedIn
+                  ? `請從左側清單選擇商品，目前已選 ${ps.length} 項。`
+                  : `請先從商品卡片選擇兩項商品。現在已選 ${ps.length} 項。`}
+              </p>
+              {navButton('挑選商品', 'catalog', navigate)}
+            </div>
+          ) : (
+            <>
+              <div className="compare-grid">
+                <div className="compare-cell label visual"> 比較項目 </div>
+                {ps.map(p => (
+                  <div className="compare-cell visual compare-product" key={p.id}>
+                    <img src={photo(p)} alt={p.name + '商品概念圖片'} />
+                    <h3>{p.name}</h3>
+                    <div className="price">{money(p.price)}</div>
+
+                    <button
+                      className="text-link"
+                      onClick={() => navigate('detail/' + p.id)}
+                    > 查看詳情 </button>
+
+                    <button
+                      className="compare-remove-btn"
+                      onClick={() => {
+                        if (isLoggedIn) {
+                          onCancelActiveCompare(p.id);
+                        } else {
+                          toggleCompare(p.id);
+                        }
+                      }}
+                    > 取消比較 </button>
+                  </div>
+                ))}
+
+                {rows.flatMap(([k, get]) => [
+                  <div className="compare-cell label" key={k + 'label'}> {k} </div>,
+                  ...ps.map(p => (
+                    <div className="compare-cell" key={k + p.id}>
+                      {get(p)}
+                    </div>
+                  ))
+                ])}
+              </div>
+
+              <div className={
+                  'info-note ' +
+                  (ps.some(p => p.price == null) ? 'warning' : '')
+                }
+              >{ps.some(p => p.price == null)
+                ? '其中一款商品的資訊尚未完整公布。請先詢問，不要依未確認資料做購買決定。'
+                : '比較資料是設計示意，正式購買前請確認實際資訊。'}
+              </div>
+
+              <div className="detail-actions">
+                {ps.map(p => p.price == null ? 
+                  (
+                    <button key={p.id} className="btn btn-primary" onClick={() => {
+                        if (!user) {
+                          navigate('login');
+                          return;
+                        }
+                        navigate('inquiry/' + p.id);
+                      }}
+                    > 詢問商品 </button>
+                  ) : (
+                    <button key={p.id} className="btn btn-outline" onClick={() => add(p.id)}
+                    > 加入購物車 </button>
+                  )
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function totals(cart) {
@@ -263,6 +435,8 @@ function App() {
   });
   const [cart,setCart]=useState(saved.cart||{});
   const [compare,setCompare]=useState(saved.compare||[]);
+  const [compareList, setCompareList] = useState([]);
+  const [activeCompare, setActiveCompare] = useState([]);
   const [category,setCategory]=useState('全部商品');
   const [query,setQuery]=useState('');
   const [search,setSearch]=useState('');
@@ -278,6 +452,48 @@ function App() {
   const logout = () => {setUser(null);navigate('home');setToast('已登出');};
   const add = id => { if (!user) { navigate("login"); return;} setCart(v => { const currentQty = v[id] || 0; if (currentQty >= 99) { setToast('單一商品最多99個'); return v;} setToast('已加入購物車'); return {...v, [id]: currentQty + 1};});};
   const toggleCompare=id=>setCompare(v=>v.includes(id)?v.filter(x=>x!==id):v.length<2?[...v,id]:(setToast('最多比較兩項商品'),v));
+  function handleAddActiveCompare(productId) {
+    setActiveCompare(current => {
+      if (current.includes(productId)) return current;
+
+      if (current.length >= 2) {
+        setToast('一次最多比較兩個商品');
+        return current;
+      }
+
+      return [...current, productId];
+    });
+  }
+  function handleToggleCompareList(productId) {
+    setCompareList(current => {
+      if (current.includes(productId)) {
+        return current.filter(id => id !== productId);
+      }
+
+      return [...current, productId];
+    });
+
+    // 從會員比較清單移除時，也取消目前的並排比較
+    setActiveCompare(current =>
+      current.filter(id => id !== productId)
+    );
+  }
+  // 將商品從會員比較清單移除
+  function handleRemoveCompareList(productId) {
+    setCompareList(current =>
+      current.filter(id => id !== productId)
+    );
+    // 若商品正在比較，也從目前比較區移除
+    setActiveCompare(current =>
+      current.filter(id => id !== productId)
+    );
+  }
+  // 取消目前比較，但保留在比較清單
+  function handleCancelActiveCompare(productId) {
+    setActiveCompare(current =>
+      current.filter(id => id !== productId)
+    );
+  }
   function handleRegister(form, setError) {
     const accounts = JSON.parse(
       localStorage.getItem("arngren_accounts") || "[]"
@@ -371,11 +587,11 @@ function App() {
   }
   const [view,id]=route.split('/');
   const p=byId(id)||products[0];
-  const cardProps={compare,toggleCompare,add,navigate, user, toggleFavorite: handleToggleFavorite, };
+  const cardProps={compare,toggleCompare,add,navigate, user, toggleFavorite: handleToggleFavorite, compareList, activeCompare, onAddToCompareList: handleToggleCompareList, };
   let page;
   if(view==='catalog')page=<Catalog navigate={navigate} cardProps={cardProps} category={category} setCategory={setCategory} query={query} setQuery={setQuery}/>;
   else if(view==='detail')page=<Detail p={p} navigate={navigate} compare={compare} toggleCompare={toggleCompare} add={add}/>;
-  else if(view==='compare')page=<Compare compare={compare} navigate={navigate} add={add} toggleCompare={toggleCompare}/>;
+  else if(view==='compare')page=<Compare compare={compare} navigate={navigate} add={add} toggleCompare={toggleCompare} user={user} compareList={compareList} activeCompare={activeCompare} onAddActiveCompare={handleAddActiveCompare} onCancelActiveCompare={handleCancelActiveCompare} onRemoveCompareList={handleRemoveCompareList}/>;
   else if(view==='cart')page=<Cart cart={cart} setCart={setCart} navigate={navigate}/>;
   else if(view==='checkout')page=<Checkout cart={cart} setCart={setCart} navigate={navigate} setLastOrder={setLastOrder}/>;
   else if(view==='shipping')page=<Shipping navigate={navigate}/>;
@@ -384,19 +600,21 @@ function App() {
   else if(["login", "register", "profile", "orders", "inquiries", "favorites"].includes(view)){page = (<MemberPages page={view} user={user} products={products} onLogin={handleLogin} onRegister={handleRegister} onNavigate={navigate} onToggleFavorite={handleToggleFavorite} getProductImage={photo} formatPrice={money}/>);}
   else page=<Home navigate={navigate} category={category} setCategory={setCategory}/>;
   const searchSubmit=e=>{e.preventDefault();setQuery(search.trim());setCategory('全部商品');navigate('catalog')};
+  const compareCount = user ? compareList.length : compare.length;
+  const selectedCompare = user ? activeCompare : compare;
   return <>
     <a className="skip" href="#main">跳到主要內容</a>
     <div className="announcement">課堂作業原型 · 圖片與商品資料為設計示意</div>
     <header className="site-header"><div className="container head-inner"><a className="brand" href="#home" aria-label="ARNGREN 首頁"><span className="brand-mark">A</span>ARN<span>GREN</span></a><nav className="main-nav" aria-label="主要導覽">{[['首頁','home'],['探索商品','catalog'],['商品比較','compare']].map(([label,to])=><button key={to} className={'nav-link '+(view===to?'active':'')} data-route={to} onClick={()=>navigate(to)}>{label}</button>)}</nav>
       <div className="header-actions"><form className="header-search" onSubmit={searchSubmit}><MagnifyingGlass size={18} weight="bold" aria-hidden="true"/><input id="header-search" type="search" aria-label="搜尋商品" placeholder="搜尋商品或類型" value={search} onChange={e=>setSearch(e.target.value)} /></form>
-        <button className="icon-action compare-action" data-route="compare" aria-label="查看商品比較" onClick={()=>navigate('compare')}><ArrowsLeftRight size={19} weight="regular" aria-hidden="true"/><span className="action-word">比較</span>{compare.length>0&&<span className="count">{compare.length}</span>}</button>
+        <button className="icon-action compare-action" data-route="compare" aria-label="查看商品比較" onClick={()=>navigate('compare')}><ArrowsLeftRight size={19} weight="regular" aria-hidden="true"/><span className="action-word">比較</span>{compareCount>0&&<span className="count">{compareCount}</span>}</button>
         <button className="icon-action" data-route="cart" aria-label="查看購物車" onClick={()=>navigate('cart')}><ShoppingBag size={19} weight="regular" aria-hidden="true"/><span className="action-word">購物車</span>{Object.values(cart).reduce((a,b)=>a+Number(b),0)>0&&<span className="count">{Object.values(cart).reduce((a,b)=>a+Number(b),0)}</span>}</button>
         <MemberMenu user={user} currentPage={route} onNavigate={navigate} onLogout={logout}/>
         <button className="icon-action menu-button" aria-label="開啟導覽選單" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(v=>!v)}><List size={22} weight="bold" /></button></div></div>
       <nav className={'mobile-nav '+(mobileOpen?'':'hidden')} aria-label="手機導覽"><form className="mobile-search" onSubmit={searchSubmit}><MagnifyingGlass size={18} aria-hidden="true"/><input type="search" aria-label="搜尋商品" placeholder="搜尋商品或類型" value={search} onChange={e=>setSearch(e.target.value)} /><button type="submit">搜尋</button></form><div className="mobile-links">{[['首頁','home'],['探索商品','catalog'],['商品比較','compare'],['購物車','cart']].map(([label,to])=><button key={to} className="nav-link" onClick={()=>navigate(to)}>{label}</button>)}</div></nav>
     </header>
     <main id="main">{page}</main>
-    {compare.length>0&&['home','catalog','detail'].includes(view)&&<div className="comparison-bar"><p>已選 {compare.length}/2 項商品{compare.length<2?'，再選 1 項即可比較':''}</p><button className="btn btn-primary btn-sm" data-route="compare" disabled={compare.length<2} onClick={()=>navigate('compare')}>查看比較</button><button className="btn btn-quiet btn-sm" onClick={()=>setCompare([])}>清除</button></div>}
+    {compareCount>0&&['home','catalog','detail'].includes(view)&&<div className="comparison-bar"><p>{user ? `比較清單已有 ${compareList.length} 項商品` : `已選 ${compare.length}/2 項商品${compare.length<2?'，再選 1 項即可比較':''}`}</p><button className="btn btn-primary btn-sm" data-route="compare" disabled={!user && compare.length<2} onClick={()=>navigate('compare')}>查看比較</button><button className="btn btn-quiet btn-sm" onClick={()=>{if(user) { setCompareList([]); setActiveCompare([]);} else {setCompare([])}}}>清除</button></div>}
     {toast&&<div className="toast" role="status" aria-live="polite">{toast}</div>}
     <footer className="site-footer"><div className="container footer-inner"><div><div className="brand" style={{color:'white'}}><span className="brand-mark">A</span>ARN<span>GREN</span></div><p>本頁為 ARNGREN 使用者介面重新設計課堂作業。互動、商品描述與訂單結果皆為示意，不會向原網站送出訂單或付款。</p></div><div><p>設計重點：找得到商品、看得懂差異、清楚完成訂購。</p><a href="https://arngren.net/" target="_blank" rel="noopener" style={{fontSize:13}}>參考原網站</a></div></div></footer>
   </>;

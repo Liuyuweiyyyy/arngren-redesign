@@ -1,5 +1,11 @@
 # ARNGREN 網站完整檔案
 
+整理日期：2026-10-23
+版本：精細坦克模型版（線上版本 12）
+原始碼版本：103652dd88a7d12b96973473905217cbb1a30879
+
+線上公開網址：https://arngren-redesign-study.lemonypear64.chatgpt.site/
+
 ## 在電腦預覽
 
 1. 將 ZIP 完整解壓縮。
@@ -14,8 +20,7 @@
 
 - `dist/`：可部署與預覽的成品，包含全部圖片、JavaScript 與 CSS。
 - `src/`：React 原始碼、樣式與 Three.js 模型。
-- `src/components/TankExperience/tank-scene.js`：模型主體、材質、相機與動畫。
-- `src/components/TankExperience/tank-detail.js`：履帶、輪組、艙蓋、格柵和內部配件。
+- `src/components/TankExperience/`：首頁 tank 模型。
 - `package.json`、`package-lock.json`：套件清單與版本鎖定。
 - `scripts/preview.cjs`：不依賴額外套件的本機預覽工具。
 - `ASSET_SOURCES.md`：素材來源說明。
